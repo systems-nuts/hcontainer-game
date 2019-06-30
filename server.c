@@ -69,6 +69,11 @@ void write_clients_int(int * cli_sockfd, int msg)
     write_client_int(cli_sockfd[0], msg);
     write_client_int(cli_sockfd[1], msg);
 }
+void print_iteration()
+{
+        static int i = 0;
+        printf("[%d] game server is waiting for request  %d\n", getpid(), i++);
+}
 
 /*
  * Connect Functions
@@ -411,7 +416,12 @@ int main(int argc, char *argv[])
     
     int lis_sockfd = setup_listener(atoi(argv[1])); /* Listener socket. */
     pthread_mutex_init(&mutexcount, NULL);
-
+ /*    for (int i = 0; i < 16; i++)
+            {
+               print_iteration();
+               sleep(1);
+            }
+*/
     while (1) {
         if (player_count <= 252) { /* Only launch a new game if we have room. Otherwise, just spin. */  
             int *cli_sockfd = (int*)malloc(2*sizeof(int)); /* Client sockets */
