@@ -109,6 +109,10 @@ int setup_listener(int portno)
     /* Return the socket number. */
     return sockfd;
 }
+void reset(struct timeval* tv){
+    tv->tv_sec = 0;
+    tv->tv_usec = 30;
+}
 
 /* Sets up the client sockets and client connections. */
 void get_clients(int lis_sockfd, int * cli_sockfd)
@@ -119,19 +123,28 @@ void get_clients(int lis_sockfd, int * cli_sockfd)
     #ifdef DEBUG
     printf("[DEBUG] Listening for clients...\n");
     #endif 
-
+    fd_set socketfds;
     /* Listen for two clients. */
     int num_conn = 0;
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 30;
+    int select_ret;
     while(num_conn < 2)
     {
         /* Listen for clients. */
-	    listen(lis_sockfd, 253 - player_count);
-        
+        listen(lis_sockfd, 253 - player_count);
+        FD_ZERO (&socketfds);   //clean set
+        FD_SET(lis_sockfd,&socketfds); //add socket fd to the set
+        reset(&tv);
+
         /* Zero out memory for the client information. */
         memset(&cli_addr, 0, sizeof(cli_addr));
 
         clilen = sizeof(cli_addr);
-	
+	select_ret = select (lis_sockfd + 1, &socketfds, NULL, NULL, &tv);
+        if (select_ret == -1 ) {printf("select error\n");continue;}
+        if (FD_ISSET(lis_sockfd , &socketfds)){
 	    /* Accept the connection from the client. */
         cli_sockfd[num_conn] = accept(lis_sockfd, (struct sockaddr *) &cli_addr, &clilen);
     
@@ -166,6 +179,7 @@ void get_clients(int lis_sockfd, int * cli_sockfd)
         }
 
         num_conn++;
+        }
     }
 }
 
@@ -396,9 +410,8 @@ void *run_game(void *thread_data)
     player_count--;
     printf("Number of players is now %d.", player_count);
     pthread_mutex_unlock(&mutexcount);
-    
     free(cli_sockfd);
-
+    printf("???\n");
     pthread_exit(NULL);
 }
 
@@ -413,19 +426,19 @@ int main(int argc, char *argv[])
         fprintf(stderr,"ERROR, no port provided\n");
         exit(1);
     }
-    
+       
     int lis_sockfd = setup_listener(atoi(argv[1])); /* Listener socket. */
     pthread_mutex_init(&mutexcount, NULL);
  /*    for (int i = 0; i < 16; i++)
             {
-               print_iteration();
                sleep(1);
             }
-*/
+*/ int *cli_sockfd ;
     while (1) {
         if (player_count <= 252) { /* Only launch a new game if we have room. Otherwise, just spin. */  
-            int *cli_sockfd = (int*)malloc(2*sizeof(int)); /* Client sockets */
+            cli_sockfd = (int*)malloc(2*sizeof(int));
             memset(cli_sockfd, 0, 2*sizeof(int));
+
             
             /* Get two clients connected. */
             get_clients(lis_sockfd, cli_sockfd);
@@ -435,16 +448,11 @@ int main(int argc, char *argv[])
             #endif
 
             pthread_t thread; /* Don't really need the thread id for anything in this case, but here it is anyway. */
-            int result = pthread_create(&thread, NULL, run_game, (void *)cli_sockfd); /* Start a new thread for this game. */
-            if (result){
-                printf("Thread creation failed with return code %d\n", result);
-                exit(-1);
-            }
-            
-            #ifdef DEBUG
-            printf("[DEBUG] New game thread started.\n");
-            #endif
+            pthread_create(&thread, NULL, run_game, (void *)cli_sockfd); /* Start a new thread for this game. */
+            pthread_join(thread,NULL);
+            printf("free sockfd\n");
         }
+
     }
 
     close(lis_sockfd);
